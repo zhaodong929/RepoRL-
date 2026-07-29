@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Environments and secrets
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# RepoRL runtime data
+artifacts/
+checkpoints/
+outputs/
+trajectories/
+task_repos/
+wandb/
+mlruns/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+
+# Local sandbox state
+.docker-state/
+.reporl/

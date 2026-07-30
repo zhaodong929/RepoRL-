@@ -1,0 +1,44 @@
+[rollout]
+run_id = "eval-sft-001"
+method = "sft-agent"
+tasks_file = "artifacts/tasks/test-runtimes.jsonl"
+task_artifacts_root = "artifacts/sealed"
+artifacts_root = "artifacts/evaluations"
+expected_split = "test"
+expected_dataset_manifest_sha256 = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+expected_split_seal_sha256 = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+expected_split_assignment_sha256 = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+expected_split_membership_sha256 = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+expected_repository_records_sha256 = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+expected_tasks_file_sha256 = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+group_size = 1
+seed = 12042
+
+[rollout.runner]
+max_consecutive_invalid_actions = 3
+max_policy_output_chars = 100000
+max_conversation_bytes = 3000
+context_token_reserve = 768
+
+[rollout.policy]
+backend = "remote_trace"
+model_id = "Qwen/Qwen2.5-Coder-3B-Instruct"
+model_revision = "488639f1ff808d1d3d0ba301aef8c11461451ec5"
+adapter_path = "outputs/sft-qwen25-coder-3b-4090/adapter-final"
+base_url = "http://127.0.0.1:8010"
+token_environment_variable = "REPORL_POLICY_SERVER_TOKEN"
+load_in_4bit = true
+max_input_tokens = 4096
+max_new_tokens = 256
+temperature = 0.0
+top_p = 1.0
+timeout_seconds = 180.0
+
+[rollout.reward]
+success_bonus = 1.0
+target_progress_weight = 0.05
+regression_weight = 0.03
+valid_patch_weight = 0.02
+cost_weight = 0.05
+invalid_action_weight = 0.02
+budget_exhausted_penalty = 0.02

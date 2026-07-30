@@ -5,11 +5,37 @@
 - Origin Skill: academic-research-suite / experiment-agent
 - Origin Mode: plan
 - Origin Date: 2026-07-29
-- Verification Status: UNVERIFIED
-- Version Label: architecture_v1
+- Verification Status: LOCAL CONTRACTS VERIFIED; REAL DOCKER AND GPU E2E PENDING
+- Version Label: architecture_v2
 
-`UNVERIFIED` means the design has not yet passed the sandbox and end-to-end acceptance tests
-defined below. It does not mean the document is speculative about its trust boundaries.
+The core Python components and fake-Docker contract tests exist. This status does not mean the
+system has completed a real Linux Docker adversarial run, an AutoDL rollout, model training, or a
+sealed evaluation. Those execution gates remain open.
+
+## Implementation status (2026-07-30)
+
+Implemented in the repository:
+
+- typed task, action, trajectory, verifier, reward, and training records;
+- bounded agent tools, runner budgets and context compaction, local/remote policy adapters, and an
+  authenticated policy server;
+- Docker agent, admission, and verifier implementations with unit and injected-client contract
+  tests;
+- SWE-smith preparation/import, lineage sealing, task admission/materialization, rollout
+  collection, immutable artifact storage, SFT preparation/training, external-rollout LoRA GRPO,
+  and evaluation/bootstrap entry points;
+- cloud preflight, transfer, policy-service, collection, SFT, GRPO, and evaluation configurations
+  intended for a split CPU-Docker/GPU deployment.
+
+Not yet demonstrated:
+
+- real Docker admission and adversarial probes on the intended Linux worker;
+- a model-driven repository rollout, prompt baseline, QLoRA checkpoint, GRPO update, or sealed
+  evaluation on AutoDL or another GPU host;
+- reported performance, throughput, VRAM, or cost measurements.
+
+Agent Lightning and a dashboard are deliberately absent. They are deferred extensions, not
+implemented capabilities.
 
 ## System boundary
 
@@ -74,20 +100,34 @@ result counts are bounded.
 
 ```python
 class PolicyBackend(Protocol):
-    def act(self, context: AgentContext, tools: ToolSchemaSet) -> PolicyStep: ...
+    def act(
+        self,
+        messages: tuple[ChatMessage, ...],
+        *,
+        seed: int,
+        timeout_seconds: float | None = None,
+    ) -> PolicyStep: ...
 ```
 
-`PolicyStep` retains the raw assistant output, validated action, token IDs when available,
-assistant-token mask, policy revision, token usage, latency, and optional old-policy log
-probabilities. Tool observations are context but are never treated as policy-generated tokens.
+`PolicyStep` retains raw assistant output, token usage, latency, and an optional generation trace
+containing prompt IDs, generated token IDs, sampling settings, and old-policy log probabilities.
+The runner records the separately validated action and tool result in `TrajectoryEvent`; SFT
+conversion later derives assistant-only loss masks from the exact replayed conversation. Tool
+observations are context but are never treated as policy-generated tokens.
 
 ### Sandbox
 
 ```python
-class Sandbox(Protocol):
-    def reset(self, task: TaskSpec) -> WorkspaceHandle: ...
-    def execute(self, action: Action) -> ToolResult: ...
-    def diff(self) -> PatchArtifact: ...
+class SandboxProtocol(Protocol):
+    def reset(self, task: TaskSpec) -> None: ...
+    def execute(
+        self,
+        action: Action,
+        *,
+        call_id: str,
+        timeout_seconds: float | None = None,
+    ) -> ToolResult: ...
+    def diff(self, *, timeout_seconds: float | None = None) -> str: ...
     def close(self) -> None: ...
 ```
 
@@ -101,8 +141,10 @@ class AgentRunner:
         self,
         task: TaskSpec,
         policy: PolicyBackend,
-        sandbox: Sandbox,
-        budget: TaskBudgets,
+        sandbox: SandboxProtocol,
+        *,
+        seed: int,
+        trajectory_id: str | None = None,
     ) -> Trajectory: ...
 ```
 
@@ -112,34 +154,60 @@ terminal states and always closes the sandbox.
 ### Verifier
 
 ```python
-class Verifier(Protocol):
-    def verify(self, task_id: str, patch: PatchArtifact) -> VerificationResult: ...
+class Verifier:
+    def verify(
+        self,
+        manifest: VerifierRunSpec,
+        patch: PatchArtifact,
+    ) -> VerificationResult: ...
 ```
 
 Verification starts from a pristine snapshot, never from the agent workspace. The verifier:
 
 1. verifies patch hash, size, file modes, paths, and forbidden files;
 2. rejects absolute paths, traversal, symlink escape, submodules, and unexpected binaries;
-3. applies the patch with a structured patch library or `git apply --check`;
-4. mounts hidden tests read-only only after the patch is applied;
-5. runs fixed target and regression argv under hard resource limits;
-6. parses JUnit XML and fixed canonical test IDs, not model-visible stdout counts;
-7. emits `pass`, `agent_failure`, or `infrastructure_error` with component evidence.
+3. applies the patch with `git apply --check`, records Git's resulting paths, and disposes the
+   patch-validation container before any hidden tests are introduced;
+4. creates a fresh suite container, reconstructs the pristine repository, and reapplies the exact
+   approved patch;
+5. uploads hidden tests through the Docker archive API into a random staging root under `/tmp`;
+6. runs fixed target and regression argv under hard resource limits;
+7. pauses the suite container, obtains the declared JUnit path with Docker `get_archive`, and
+   validates Docker stat metadata plus a bounded one-member regular-file tar before parsing XML;
+8. checks fixed canonical test IDs rather than trusting stdout counters, then emits `pass`,
+   `agent_failure`, or `infrastructure_error` with structured evidence.
+
+The staging root and hidden-test directories are owned by UID/GID 0 with mode `0555`; hidden
+regular files are `0444`, or `0555` when source executable bits must be preserved. The sole
+`evidence/` directory is owned by the configured non-root suite UID/GID with mode `0700`, so the
+test process can create JUnit output without being able to rename or modify the hidden-test tree.
+The container is paused before the daemon reads evidence, and JUnit size is bounded independently
+of process stdout.
+
+This is an integrity improvement, not a secrecy or authenticity boundary. Hidden tests and the
+patched repository execute in the same suite container and normally in the same Python process.
+The tested code can therefore read hidden-test files and can theoretically write forged JUnit XML
+to the writable evidence directory. The random staging path reduces accidental collisions and
+simple precomputed paths; it is not a cryptographic secret. Canonical test IDs, fresh containers,
+patch policy, and regression checks raise the cost of forgery but do not prove JUnit provenance.
 
 ## Agent loop
 
 ```python
-context = runner.start(task)
-for step in range(task.budgets.max_steps):
-    policy_step = policy.act(context, TOOL_SCHEMAS)
-    action = parser.validate(policy_step.raw_action)
-    result = tool_gateway.execute(action, sandbox, task)
-    trajectory.append(policy_step, result)
-    context = runner.advance(context, action, result)
-    if action.kind == "finish":
-        break
-patch = sandbox.diff()
-return runner.finalize(trajectory, patch)
+sandbox.reset(task)
+try:
+    messages = initial_messages(task)
+    for step in range(task.budgets.max_steps):
+        policy_step = policy.act(messages, seed=seed + step, timeout_seconds=remaining)
+        action = parse_policy_action(policy_step.raw_output)
+        result = sandbox.execute(action, call_id=call_id, timeout_seconds=remaining)
+        events.append(TrajectoryEvent(policy_step, action, result))
+        messages = append_tool_observation(messages, result)
+        if action.kind == "finish":
+            break
+    patch = sandbox.diff(timeout_seconds=remaining)
+finally:
+    sandbox.close()
 ```
 
 An invalid action consumes a step and receives a structured error. Repeated invalid actions,
@@ -156,14 +224,15 @@ Both sandboxes require:
 - a disposable copy-on-write workspace with only the required repository snapshot;
 - prebuilt dependencies addressed by immutable image digest;
 - no credentials, host home directory, Git credential store, or cloud metadata access;
-- capped stdout/stderr with complete overflow logs stored outside model context.
+- capped stdout/stderr and bounded observations stored in trajectory artifacts.
 
 The agent image must additionally exclude `.git` history, hidden tests, reference patches,
 mutation metadata, and pristine files that make a synthetic defect trivially reversible.
 
-The verifier image must additionally use fixed commands, read-only tests, and a clean workspace.
-No verifier result is accepted from an agent-created executable named `pytest` or an altered
-test configuration.
+The verifier uses fixed commands and a clean workspace. Hidden tests are absent from the
+patch-validation container and are daemon-injected as root-owned, non-writable files only in the
+fresh suite container. Patch policy rejects test configuration and startup-hook changes, but the
+same-process limitation above still applies.
 
 ## Patch policy
 
@@ -221,35 +290,42 @@ Agent-caused resource exhaustion is not reclassified as infrastructure failure.
 ```text
 src/reporl/
   schemas.py
-  agent/{runner,policy,parser,prompts}.py
-  tools/{gateway,search,read,patch,test}.py
+  agent/{environment,hf_policy,models,parser,policy,policy_server,prompts,remote_policy,runner}.py
+  tools/{gateway,output,patch,paths}.py
   sandbox/{base,docker}.py
-  tasks/{loader,validator,builder,lineage}.py
-  verifier/{pipeline,policy,reward,junit}.py
-  rollouts/{backend,collector,store}.py
-  training/{sft,grpo}.py
-  evaluation/{runner,metrics,bootstrap}.py
-  cli.py
-configs/{agent,data,reward,training,evaluation}/
-fixtures/
-tests/{unit,contract,integration,e2e}/
+  tasks/{adapters,admission,admission_docker,canonical,dataset,fixture,lineage,loader,
+         manifest,materialize,swe_smith_prepare}.py
+  verifier/{base,docker,junit,models,pipeline}.py
+  rewards/terminal.py
+  rollouts/{collector,config,store}.py
+  training/{config,grpo,math,prepare_sft,provenance,records,sft}.py
+  evaluation/{bootstrap,metrics,report}.py
+  cloud/preflight.py
+cloud/scripts/
+configs/*.toml
+tests/{unit,contract}/
 ```
 
-Only implemented modules are added. Placeholder modules must not imply a working capability.
+This map lists current files, not a target layout. There is no dashboard package, Agent Lightning
+adapter, distributed scheduler, or real-Docker integration/e2e test suite in the repository.
 
 ## Training boundary
 
-`RolloutBackend` decouples environment execution from optimization. TRL's standard
-`GRPOTrainer` is not assumed to provide a multi-turn tool environment. The integration spike
-must demonstrate that exact generated token IDs, old-policy log probabilities, policy versions,
-and assistant-only loss masks survive the tool loop. Zero-variance reward groups are skipped and
-reported.
+The rollout collector runs the interactive environment separately from optimization. A remote
+policy endpoint returns prompt IDs, generated IDs, old-policy log probabilities, sampling
+parameters, and a full policy identity; immutable GRPO groups bind those traces to the exact
+behavior-policy adapter. The current trainer is a custom single-GPU LoRA GRPO update over these
+externally collected groups, not TRL `GRPOTrainer` and not Agent Lightning. It skips and reports
+zero-variance groups and rejects stale policy identities. Unit tests cover the record and math
+contracts, but no real GPU update has run yet.
 
-Agent Lightning is a later `CreditAssigner` implementation. It is admitted only after terminal
-reward RL is stable, so a step-credit comparison changes credit assignment rather than the
-environment, policy, verifier, or task distribution.
+Agent Lightning remains a future credit-assignment experiment. It is admitted only after terminal
+reward RL is stable, so a later comparison changes credit assignment rather than the environment,
+policy, verifier, or task distribution.
 
 ## Architecture acceptance tests
+
+The following remain release gates, not claims that all have passed:
 
 - Hidden test and gold-patch byte signatures cannot be found from the agent container.
 - Absolute, traversal, symlink, submodule, test, config, and oversized patch attacks are rejected.
@@ -259,3 +335,11 @@ environment, policy, verifier, or task distribution.
 - A fake deterministic policy produces byte-identical replay metadata apart from timestamps.
 - Infrastructure failures never enter a trainer batch.
 - The same patch verified twice in the same image has the same structured result.
+
+Current local coverage exercises schemas, policies, tools, reward math, data sealing,
+materialization, collector accounting, training records, JUnit parsing, verifier classification,
+and injected-client Docker contracts. The verifier contract asserts root-owned staging,
+pause-before-archive ordering, and rejection of symlink or oversized JUnit evidence. A real Docker
+adversarial canary exists behind `REPORL_RUN_DOCKER_TESTS=1`, but it has not been run on this
+machine. Linux Docker, real task images, repeated admission, remote-policy rollout, and GPU
+training/evaluation gates remain pending.

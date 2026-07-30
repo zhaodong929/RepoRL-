@@ -25,6 +25,31 @@ sandbox = [
   "docker>=7.1,<8",
   "unidiff>=0.7,<1",
 ]
+server = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.34,<1",
+]
+training = [
+  "accelerate>=1.2,<2",
+  "bitsandbytes>=0.45,<1; sys_platform == 'linux'",
+  "datasets>=3.2,<5",
+  "peft>=0.14,<1",
+  "safetensors>=0.5,<1",
+  "sentencepiece>=0.2,<1",
+  "torch>=2.6,<3",
+  "transformers>=4.48,<5",
+]
+
+[project.scripts]
+reporl-collect = "reporl.rollouts.collector:main"
+reporl-evaluate = "reporl.evaluation.report:main"
+reporl-grpo = "reporl.training.grpo:main"
+reporl-policy-server = "reporl.agent.policy_server:main"
+reporl-preflight = "reporl.cloud.preflight:main"
+reporl-prepare-sft = "reporl.training.prepare_sft:main"
+reporl-prepare-swe-smith = "reporl.tasks.swe_smith_prepare:main"
+reporl-sft = "reporl.training.sft:main"
+reporl-materialize = "reporl.tasks.materialize:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/reporl"]

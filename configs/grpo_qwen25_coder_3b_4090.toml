@@ -1,0 +1,17 @@
+[grpo]
+model_id = "Qwen/Qwen2.5-Coder-3B-Instruct"
+model_revision = "488639f1ff808d1d3d0ba301aef8c11461451ec5"
+initial_adapter = "outputs/sft-qwen25-coder-3b-4090/adapter-final"
+rollout_groups_file = "artifacts/rollouts/grpo-iteration-001/grpo-groups.jsonl"
+output_dir = "outputs/grpo-qwen25-coder-3b-4090-iteration-001"
+expected_policy_revision = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+epochs = 1
+learning_rate = 5e-6
+clip_epsilon = 0.2
+kl_beta = 0.02
+gradient_accumulation_steps = 8
+max_grad_norm = 1.0
+seed = 42
+load_in_4bit = true
+bf16 = true
+gradient_checkpointing = true

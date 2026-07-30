@@ -30,5 +30,11 @@ jobs:
         run: uv run ruff format --check .
       - name: Type check
         run: uv run mypy
+      - name: Validate cloud scripts
+        run: bash -n cloud/scripts/*.sh
+      - name: Validate cloud configs
+        env:
+          REPORL_PYTHON: ${{ github.workspace }}/.venv/bin/python
+        run: bash cloud/scripts/validate_configs.sh
       - name: Test
         run: uv run pytest --cov=reporl --cov-report=term-missing

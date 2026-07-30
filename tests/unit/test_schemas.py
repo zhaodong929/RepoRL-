@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from reporl.schemas import (
     ApplyPatch,
     Finish,
+    GenerationTrace,
     ReadFile,
     RunTests,
     SearchCode,
@@ -82,3 +83,23 @@ def test_trajectory_requires_contiguous_steps() -> None:
             termination_reason=TerminationReason.FINISHED,
             patch="",
         )
+
+
+def test_generation_trace_requires_aligned_logprobs() -> None:
+    with pytest.raises(ValidationError, match="align"):
+        GenerationTrace(
+            prompt_input_ids=(1, 2),
+            generated_token_ids=(3, 4),
+            old_logprobs=(-0.1,),
+        )
+
+
+def test_parse_error_event_does_not_require_fake_tool_call() -> None:
+    event = TrajectoryEvent(
+        step=0,
+        raw_policy_output="not-json",
+        parse_error="invalid JSON",
+    )
+
+    assert event.tool_call is None
+    assert event.tool_result is None

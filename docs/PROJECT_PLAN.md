@@ -5,8 +5,8 @@
 - Origin Skill: academic-research-suite / experiment-agent
 - Origin Mode: plan
 - Origin Date: 2026-07-29
-- Verification Status: UNVERIFIED
-- Version Label: code_plan_v1
+- Verification Status: IMPLEMENTATION READY FOR CLOUD CANARY; EXPERIMENTS NOT RUN
+- Version Label: code_plan_v2
 
 ## Experiment overview
 
@@ -17,6 +17,26 @@
   post-training.
 - **Type:** Agent system engineering, post-training, and controlled evaluation.
 - **Estimated core duration:** 10-12 full-time weeks or 16-20 part-time weeks.
+
+## Current status (2026-07-30)
+
+Code availability and experimental evidence are tracked separately. An entry point existing in
+Git does not mean its Docker, GPU, data, or scientific gate has passed.
+
+| Area | Implemented and locally checked | Still pending |
+|---|---|---|
+| Foundation | Package layout, lock file, strict schemas, local lint/type/test workflows, and GitHub-oriented CI configuration | Clean Linux/CI reproduction at a recorded release commit |
+| Agent and tools | Structured parser, bounded gateway, runner budgets/context compaction, Transformers and OpenAI-compatible policies, authenticated remote policy service | Real model-driven repository episodes and the 20-task prompt baseline |
+| Sandbox and verifier | Docker implementations, patch policy, JUnit parser, fresh verifier containers, root-owned hidden-test staging, pause plus bounded `get_archive`, fake-client contracts, opt-in real-Docker canary | Intended Linux Docker worker, real image/adversarial canary, repeated clean/buggy/reference admission |
+| Data | Provenance and manifest schemas, lineage seal/audit, SWE-smith preparation/import, deterministic fixture, admission and runtime materialization code | Selected real repositories, licensed task corpus, Docker admission evidence, and sealed train/validation/test files |
+| Rollouts and rewards | Immutable artifact/trajectory stores, remote collector, terminal cost-aware reward, policy identity and on-policy group checks | CPU-worker/GPU-server canary, prompt/SFT/RL trajectory datasets, measured reward distributions |
+| Training | Assistant-only SFT conversion and QLoRA trainer; custom external-rollout LoRA GRPO trainer; pinned 4090 configs and launch scripts | Any real SFT or GRPO GPU run, checkpoint, resume test, VRAM/throughput profile, or multi-seed result |
+| Evaluation and cloud | Metrics, pass@k, paired hierarchical bootstrap, leave-one-lineage-out report, preflight/transfer/run scripts | AutoDL execution, sealed evaluation, confidence intervals from real outcomes, report PDF |
+| Deferred extensions | None claimed | Agent Lightning credit assignment and the FastAPI/Streamlit dashboard |
+
+No success rate, cost improvement, checkpoint, or GPU result has been measured yet. The immediate
+goal is to reach the paid-run gate, execute the two-task Docker/policy canary, and only then scale
+collection or training.
 
 ## Deliverable definition
 
@@ -47,11 +67,13 @@ model-visible test.
 
 ### Deferred scope
 
-- Agent Lightning step-level credit assignment, until terminal RL is stable.
+- Agent Lightning step-level credit assignment, until terminal RL is stable. No adapter or
+  integration is currently implemented.
 - 7B online RL, until a 3B memory and throughput profile justifies it.
 - General shell, browser, package installation, multi-language repositories, and distributed
   sandbox scheduling.
-- FastAPI/Streamlit demo, until real evaluation artifacts exist.
+- FastAPI/Streamlit dashboard, until real evaluation artifacts exist. No dashboard package is
+  currently implemented.
 - LangGraph, RAG frameworks, and production OpenHands integration.
 
 Deferral keeps the research contribution centered on environments, verifiers, rewards, and
@@ -83,21 +105,22 @@ See `ARCHITECTURE.md` for component contracts and trust boundaries.
 - **Packaging:** `uv` with committed lock file.
 - **Core:** Pydantic, pytest, Ruff, mypy.
 - **Sandbox milestone:** Docker Engine/Desktop with Linux containers, Docker SDK, unidiff.
-- **Training milestone:** PyTorch, Transformers, Accelerate, PEFT, Datasets, TRL after a versioned
-  integration spike; vLLM is Linux-only and optional.
+- **Training milestone:** PyTorch, Transformers, Accelerate, PEFT, and Datasets. The current GRPO
+  path is custom and consumes external rollout groups; TRL and vLLM are not current dependencies.
 - **Storage:** append-only JSONL plus content-addressed files; Parquet/DuckDB for derived analysis.
 - **Tracking:** local artifacts are canonical; W&B or MLflow is optional.
 
 ### Current-machine constraint
 
 The audited development machine has an RTX 5070 Laptop GPU with about 8 GB VRAM. Python 3.13 is
-installed on Windows, while WSL has Python 3.12 and `uv`. Docker is not currently installed.
+installed on Windows, while WSL has Python 3.12 and `uv`. No local Docker or training run is part
+of the evidence recorded for this project.
 Therefore:
 
-- core contracts, task fixtures, CI, analysis, and API-model baselines can run locally;
-- Docker installation and WSL integration are a blocker for M1, not for repository initialization;
-- local training is limited to small quantized inference and experimental 1.5B/3B adapters;
-- credible multi-rollout RL is budgeted on cloud GPUs after a measured smoke test.
+- core contracts, task fixtures, static checks, and analysis can run locally;
+- the Docker gates are assigned to a Linux CPU worker rather than the laptop;
+- SFT, policy serving, and GRPO are assigned to a rented 24 GiB RTX 4090 only after preflight;
+- cloud scripts and configs are implementation artifacts, not evidence that a cloud run succeeded.
 
 ## Workstreams
 
@@ -126,6 +149,20 @@ interactive rollouts, reward integration, GRPO, checkpoints, and run manifests.
 
 Owns fixed-budget evaluation, hierarchical bootstrap, sensitivity analyses, failure taxonomy,
 technical report, README results, and artifact-only demo.
+
+### Milestone status snapshot
+
+| Milestone | Current state | Gate status |
+|---|---|---|
+| M0 | Repository foundation and local quality tooling implemented | Partially verified; clean Linux CI/release reproduction pending |
+| M1 | Sandbox, verifier, task manifests, patch/JUnit policies implemented with fake-client contracts | Open until real Linux Docker admission and adversarial probes pass |
+| M2 | Runner, policies, context handling, collector, and immutable stores implemented | Open until real-model fixture/pilot episodes and replay evidence exist |
+| M3 | SWE-smith adapter/preparation and sealed materialization pipeline implemented on deterministic fixtures | Open until real repositories and repeated Docker admission are sealed |
+| M4 | Remote baseline configs and evaluation path prepared | Not run |
+| M5 | SFT preparation/trainer and 4090 config prepared | Not run; no checkpoint |
+| M6 | External-rollout GRPO code, identity checks, and 4090 config prepared | Not run; no GPU update or RL metrics |
+| M7 | Evaluation statistics implemented | Not run on sealed model outputs |
+| M8 | Release criteria documented | Not started; dashboard remains deferred |
 
 ## Milestones and gates
 
@@ -227,7 +264,7 @@ Gate:
 
 Deliverables:
 
-- version-pinned TRL integration spike and `RolloutBackend` contract test;
+- authenticated remote-policy traces and immutable external-rollout group contracts;
 - R0, R1, and R2 with 1.5B/3B policy, group size 4, 8-12 steps, bounded episode tokens;
 - R3 no-SFT warm-start ablation at reduced scale;
 - reward curves, KL, length, zero-variance group rate, verifier throughput, GPU hours, and peak VRAM.
@@ -273,30 +310,28 @@ Gate:
 - the demo renders recorded artifacts and cannot alter the evaluated repository;
 - a clean-machine reproduction dry run succeeds.
 
-## Initial issue backlog
+## Backlog and implementation state
 
-Create these as GitHub milestones/issues after M0:
-
-| Priority | Issue | Milestone | Acceptance summary |
-|---|---|---|---|
-| P0 | Define verifier-only manifest | M1 | Hidden fields cannot serialize into agent view |
-| P0 | Build fixture repositories | M1 | Clean/buggy/reference states deterministic |
-| P0 | Harden Docker sandbox | M1 | Security probe suite fails closed |
-| P0 | Implement patch policy | M1 | Traversal/test/config/symlink edits rejected |
-| P0 | Parse pytest JUnit output | M1 | Canonical IDs and infra status are structured |
-| P0 | Implement AgentRunner | M2 | Budgets and all terminal states covered |
-| P0 | Add immutable trajectory store | M2 | Replay and artifact hashes verified |
-| P0 | Validate lineage split | M3 | Fork/shared/clone leakage assertions pass |
-| P1 | Add SWE-smith task adapter | M3 | Admission checks produce signed manifest |
-| P1 | Run prompt baseline | M4 | Frozen config and complete artifact set |
-| P1 | Build SFT dataset converter | M5 | Assistant-only masks unit-tested |
-| P1 | Train S0 and SC | M5 | Resume and validation reports reproducible |
-| P1 | Spike interactive TRL rollouts | M6 | Logprob/mask/group contract demonstrated |
-| P1 | Train R0-R3 | M6 | Reward and health metrics complete |
-| P1 | Implement hierarchical bootstrap | M7 | Simulation and paired tests pass |
-| P2 | Curate natural issue set | M7 | Post-release provenance and no leakage |
-| P2 | Add Agent Lightning adapter | M7 | Only credit assignment differs from R2 |
-| P2 | Build artifact viewer | M8 | Read-only, mobile/desktop usable, no live execution |
+| Priority | Issue | Milestone | Current state | Remaining acceptance work |
+|---|---|---|---|---|
+| P0 | Define verifier-only manifest | M1 | Implemented | Exercise with sealed real tasks |
+| P0 | Build deterministic fixtures | M1 | Implemented locally | Repeat clean/buggy/reference states in real images |
+| P0 | Harden Docker sandbox/verifier | M1 | Implemented with injected-client contracts | Run Linux Docker security probes and opt-in adversarial canary |
+| P0 | Implement patch policy | M1 | Implemented and unit tested | Red-team against selected repositories |
+| P0 | Parse pytest JUnit output | M1 | Implemented and unit tested | Confirm behavior with real task images |
+| P0 | Implement AgentRunner | M2 | Implemented and unit tested | Run real-model fixture/pilot episodes |
+| P0 | Add immutable trajectory store | M2 | Implemented and unit tested | Audit artifacts from a real rollout |
+| P0 | Validate lineage split | M3 | Implemented on fixtures | Seal the selected repository corpus |
+| P1 | Add SWE-smith preparation/import | M3 | Implemented on fixtures | Generate and admit the real pilot dataset |
+| P1 | Run prompt baseline | M4 | Not run | Freeze config and produce complete artifact set |
+| P1 | Build SFT dataset converter | M5 | Implemented and mask-tested | Convert verified cloud trajectories |
+| P1 | Train S0 and SC | M5 | Not run | Produce resumable checkpoints and validation reports |
+| P1 | Implement interactive rollout bridge | M6 | Remote trace/identity/group path implemented | Pass CPU/GPU policy and Docker canary |
+| P1 | Train R0-R3 | M6 | Not run | Produce reward, health, VRAM, and cost metrics |
+| P1 | Implement hierarchical bootstrap | M7 | Implemented and unit tested | Apply to sealed paired evaluation records |
+| P2 | Curate natural issue set | M7 | Not started | Establish post-release provenance and leakage audit |
+| P2 | Add Agent Lightning adapter | Deferred | Not implemented | Consider only after terminal GRPO is stable |
+| P2 | Build dashboard/artifact viewer | Deferred | Not implemented | Start only after real immutable evaluation artifacts exist |
 
 ## Compute plan
 
@@ -323,9 +358,10 @@ and test execution. That is not a laptop-scale pilot.
 
 | Tier | Intended work | Rough hardware expectation |
 |---|---|---|
-| Local 8 GB | Core code, Docker CPU tests, API baseline, short quantized inference | Current laptop |
-| Pilot SFT | 1.5B/3B QLoRA, short contexts | One 24 GB GPU after profiling |
-| Pilot RL | 1.5B/3B, group 4, sequential rollout/train | One or two 48 GB GPUs, workload-dependent |
+| Local 8 GB | Core code, fixtures, static checks, and unit tests | Current laptop; no training claim |
+| CPU Docker worker | Task admission, agent/verifier containers, rollout collection | Linux host with Docker; not yet exercised |
+| Pilot SFT | Qwen2.5-Coder-3B QLoRA with the checked-in short-context config | One 24 GiB RTX 4090; not yet profiled |
+| Pilot RL | 3B, group 4, external rollouts and sequential LoRA updates | One 24 GiB RTX 4090 target; canary/OOM gate required |
 | 7B RL | Only after measured 3B result and funding gate | Multi-GPU or 80 GB-class capacity |
 
 These are planning ranges, not guarantees. Sequence length, attention implementation, optimizer,
@@ -356,13 +392,14 @@ LoRA rank, vLLM topology, and concurrent rollouts determine actual memory.
 
 | Risk | Impact | Mitigation / stop rule |
 |---|---|---|
-| Hidden-test or gold leakage | Invalidates reward and claims | Separate images/manifests, byte scans, red-team tests; stop all training on detection |
+| Hidden-test or gold leakage into the agent view | Invalidates reward and claims | Separate agent/verifier manifests and containers, byte scans, red-team tests; stop all training on detection |
+| Same-process hidden-test reading or forged JUnit | Weakens verifier authenticity | State the limitation explicitly; use root-owned non-writable tests, fresh containers, canonical IDs and regression checks; treat random paths as non-secret; require a separate trusted test process/evidence channel before claiming prevention |
 | Sandbox escape or arbitrary shell | Host/security compromise | Named suites, no shell, non-root/no-network/no-socket, resource limits |
 | Synthetic tasks do not represent issues | Weak external validity | Natural issue set; limit claim to measured distributions |
 | Fork/clone leakage | Inflated generalization | Split by lineage before generation; commit and MinHash audit |
 | Flaky tests | Noisy or wrong reward | Repeated admission tests, quarantine, fixed images |
 | Too few test repositories | False precision | Preserve lineage count, cluster bootstrap, leave-one-out |
-| TRL cannot preserve interactive rollout math | Incorrect RL implementation | Integration contract spike; keep backend abstraction; do not label failed bridge as GRPO |
+| External-rollout traces cannot reproduce behavior-policy math | Incorrect RL implementation | Bind token IDs, old logprobs, sampling parameters, policy identity and adapter hash; fail closed on stale groups |
 | Early all-fail/all-pass groups | Zero GRPO signal | Log/skip zero-variance groups, curriculum by validation difficulty |
 | GPU or generation cost exceeds budget | Incomplete experiment | Start 1.5B/3B, group 4, short horizon; profile before scale |
 | pytest becomes throughput bottleneck | Expensive idle GPU | Prebuilt images, focused suites, parallel CPU verifier pool |
@@ -380,22 +417,27 @@ LoRA rank, vLLM topology, and concurrent rollouts determine actual memory.
 | SFT/RL checkpoints | `artifacts/<run>/checkpoints/` | Adapter weights | Resumable with exact config |
 | Evaluation summary | `artifacts/<run>/summaries/` | Parquet + JSON | Rebuilds every table value |
 | Technical report | `report.pdf` | PDF | Methods, uncertainty, ablations, failures, limitations |
-| Demo | `dashboard/` | Read-only app | Renders recorded trajectories without live patch execution |
+| Demo (deferred) | `dashboard/` | Read-only app | Implement only after it can render real immutable trajectories without live patch execution |
 
 Large outputs stay outside Git and are published through a versioned artifact release or model
 registry. The repository retains small manifests, schemas, scripts, and checksums.
 
-## First seven working days
+## Next execution sequence
 
-1. Install Docker Desktop/Engine with WSL2 Linux integration and verify a non-root, no-network
-   container.
-2. Finish verifier-only schemas and two fixture repositories.
-3. Implement bounded search/read/patch/test tools without a generic shell.
-4. Build pristine agent/verifier images and the clean-buggy-reference validator.
-5. Add security and determinism contract tests.
-6. Implement a fake-policy end-to-end episode and immutable trace.
-7. Run the first 20-task pilot, inspect every failure manually, and revise the manifest before any
-   model training.
+1. Record a clean commit and reproduce static checks plus the full test suite on supported Linux
+   Python before transferring code.
+2. Select licensed Python repositories, prepare SWE-smith exports, and seal repository-level
+   train/validation/test membership before model or reward tuning.
+3. On the Linux CPU Docker worker, run preflight, repeated clean/buggy/reference admission, and the
+   real verifier adversarial canary. Stop on any ownership, isolation, or evidence failure.
+4. On the rented 24 GiB RTX 4090, run GPU preflight and the authenticated policy-server smoke test;
+   record actual model revision, tokenizer identity, peak VRAM, and throughput.
+5. Run the two-task split CPU/GPU rollout canary and inspect every trajectory, container cleanup,
+   verifier result, policy trace, and artifact hash before scaling.
+6. Collect the frozen prompt baseline, then create verified SFT train/validation records and run the
+   smallest QLoRA smoke job with a new immutable run ID.
+7. Only after SFT artifacts and rollout identity checks pass, collect on-policy groups and run one
+   GRPO iteration. Agent Lightning and dashboard work remain out of scope.
 
 ## Decision log
 
@@ -406,5 +448,5 @@ registry. The repository retains small manifests, schemas, scripts, and checksum
   would improve presentation but is not required technically.
 - Use MIT for RepoRL-owned code; source repository licenses remain independently binding.
 - Do not publish placeholder performance gains. README results remain `Not measured` until M7.
-- Treat Agent Lightning and the dashboard as extensions, not prerequisites for a defensible core
-  result.
+- Treat Agent Lightning and the dashboard as deferred, currently unimplemented extensions, not
+  prerequisites for a defensible core result.

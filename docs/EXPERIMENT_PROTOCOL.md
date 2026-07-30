@@ -5,11 +5,12 @@
 - Origin Skill: academic-research-suite / experiment-agent
 - Origin Mode: plan
 - Origin Date: 2026-07-29
-- Verification Status: UNVERIFIED
-- Version Label: experiment_protocol_v1
+- Verification Status: IMPLEMENTED PROTOCOL; REAL EXPERIMENT UNRUN
+- Version Label: experiment_protocol_v2
 
 This protocol is a preregistration target. Values marked `pilot-estimated` must be fixed from
-training and validation data before the sealed test evaluation.
+training and validation data before the sealed test evaluation. No Docker/GPU training run or
+research metric has been completed as of 2026-07-30.
 
 ## Research question
 
@@ -59,7 +60,7 @@ Training reward is never an evaluation metric.
 | R1 | S0 plus outcome and potential progress | Shaping ablation |
 | R2 | S0 plus outcome, progress, and capped cost | Main method |
 | R3 | Base model plus R2 reward, without SFT | Warm-start ablation |
-| R4 | R2 with step-level credit assignment | Optional Agent Lightning extension |
+| R4 | R2 with step-level credit assignment | Deferred, unimplemented Agent Lightning extension |
 
 Headline comparisons are `R2-S0`, `R2-SC`, `R2-R1`, `R2-R0`, and `R2-R3`. `R4-R2` is reported
 only if both use identical rollouts, reward components, and training compute except for credit
@@ -205,20 +206,22 @@ than merely more post-training.
 ### R0-R3: GRPO pilot
 
 - Start with a 1.5B/3B model, group size 4, 8-12 tool steps, and an 8k-16k episode cap.
-- Collect full interactive episodes through `RolloutBackend`.
-- Store exact generated token IDs, old-policy log probabilities, assistant masks, policy version,
-  group ID, reward components, and verifier hashes.
+- Collect full interactive episodes with the split CPU-sandbox/GPU-policy collector.
+- Store exact prompt and generated token IDs, old-policy log probabilities, sampling parameters,
+  policy identity and adapter hashes, group ID, reward components, and verifier hashes.
 - Skip and report zero-variance groups; monitor their rate as a training-health metric.
 - Run rollout and optimization sequentially first. Add asynchronous workers only after policy
   staleness is measured and bounded.
-- Complete a TRL integration spike before claiming GRPO support. A text completion with one final
-  reward is not treated as an interactive environment implementation.
+- Use the implemented external-rollout LoRA GRPO update only after the policy-identity checks,
+  initial log-probability-ratio tolerance, and a real GPU smoke update pass. TRL is not a current
+  dependency, and a text completion with one final reward is not treated as an interactive
+  environment implementation.
 
 ### R4: step-level credit
 
-This extension begins only after R2 is stable. It reuses the same episodes and reward components,
-changes only the credit allocator, and evaluates learning-curve area against environment steps
-and GPU hours.
+This unimplemented extension begins only after R2 is stable. It reuses the same episodes and
+reward components, changes only the credit allocator, and evaluates learning-curve area against
+environment steps and GPU hours.
 
 ## Metrics
 
@@ -305,10 +308,10 @@ No value below is populated until the sealed evaluation.
 
 | Condition | Micro pass@1 | Repo-macro pass@1 | Calls/task | Tokens/task | Regression breaks |
 |---|---:|---:|---:|---:|---:|
-| P0 | TBD | TBD | TBD | TBD | TBD |
-| S0 | TBD | TBD | TBD | TBD | TBD |
-| SC | TBD | TBD | TBD | TBD | TBD |
-| R0 | TBD | TBD | TBD | TBD | TBD |
-| R1 | TBD | TBD | TBD | TBD | TBD |
-| R2 | TBD | TBD | TBD | TBD | TBD |
-| R3 | TBD | TBD | TBD | TBD | TBD |
+| P0 | Not measured | Not measured | Not measured | Not measured | Not measured |
+| S0 | Not measured | Not measured | Not measured | Not measured | Not measured |
+| SC | Not measured | Not measured | Not measured | Not measured | Not measured |
+| R0 | Not measured | Not measured | Not measured | Not measured | Not measured |
+| R1 | Not measured | Not measured | Not measured | Not measured | Not measured |
+| R2 | Not measured | Not measured | Not measured | Not measured | Not measured |
+| R3 | Not measured | Not measured | Not measured | Not measured | Not measured |

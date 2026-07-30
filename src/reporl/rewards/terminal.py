@@ -59,6 +59,12 @@ class RewardBreakdown(StrictModel):
     total: float
 
 
+class TrajectoryReward(StrictModel):
+    trajectory_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    breakdown: RewardBreakdown
+
+
 def compute_terminal_reward(
     signals: RewardSignals,
     config: RewardConfig | None = None,

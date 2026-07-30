@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -67,16 +68,24 @@ class TaskSpec(StrictModel):
     forbidden_globs: tuple[str, ...] = (
         "test*.py",
         "**/test*.py",
+        "*_test.py",
+        "**/*_test.py",
         "tests/**",
         "**/tests/**",
         "conftest.py",
         "**/conftest.py",
         "pytest.ini",
         "tox.ini",
+        "setup.cfg",
+        "setup.py",
         "sitecustomize.py",
         "**/sitecustomize.py",
         "requirements*.txt",
         "pyproject.toml",
+        "Pipfile",
+        "Pipfile.lock",
+        "poetry.lock",
+        "uv.lock",
         ".github/**",
     )
     available_test_suites: tuple[Literal["target", "regression"], ...] = (
@@ -169,6 +178,26 @@ class TokenUsage(StrictModel):
         return self.input_tokens + self.output_tokens
 
 
+class GenerationTrace(StrictModel):
+    """Token-level policy evidence required for on-policy updates."""
+
+    prompt_input_ids: tuple[int, ...] = Field(min_length=1)
+    generated_token_ids: tuple[int, ...] = Field(min_length=1)
+    old_logprobs: tuple[float, ...] = ()
+    sampling_temperature: float = Field(default=1.0, ge=0)
+    sampling_top_p: float = Field(default=1.0, gt=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_alignment(self) -> GenerationTrace:
+        if any(token_id < 0 for token_id in (*self.prompt_input_ids, *self.generated_token_ids)):
+            raise ValueError("token IDs must be non-negative")
+        if self.old_logprobs and len(self.old_logprobs) != len(self.generated_token_ids):
+            raise ValueError("old_logprobs must align with generated_token_ids")
+        if any(not math.isfinite(value) for value in self.old_logprobs):
+            raise ValueError("old_logprobs must be finite")
+        return self
+
+
 class ToolCall(StrictModel):
     call_id: str = Field(min_length=1, max_length=128)
     action: Action
@@ -180,6 +209,7 @@ class ToolResult(StrictModel):
     output: str
     exit_code: int | None = None
     duration_ms: int = Field(ge=0)
+    executed: bool = True
     truncated: bool = False
     artifact_path: str | None = None
 
@@ -189,6 +219,7 @@ class TerminationReason(StrEnum):
     STEP_BUDGET = "step_budget"
     TOKEN_BUDGET = "token_budget"
     WALL_TIME_BUDGET = "wall_time_budget"
+    CONTEXT_BUDGET = "context_budget"
     INVALID_ACTION = "invalid_action"
     POLICY_ERROR = "policy_error"
     INFRASTRUCTURE_ERROR = "infrastructure_error"
@@ -197,24 +228,42 @@ class TerminationReason(StrEnum):
 class TrajectoryEvent(StrictModel):
     step: int = Field(ge=0)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    tool_call: ToolCall
-    tool_result: ToolResult
+    raw_policy_output: str = ""
+    tool_call: ToolCall | None = None
+    tool_result: ToolResult | None = None
+    parse_error: str | None = None
     token_usage: TokenUsage = Field(default_factory=TokenUsage)
+    generation_trace: GenerationTrace | None = None
     policy_latency_ms: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
-    def call_ids_match(self) -> TrajectoryEvent:
-        if self.tool_call.call_id != self.tool_result.call_id:
-            raise ValueError("tool call and result IDs must match")
+    def event_is_consistent(self) -> TrajectoryEvent:
+        if (self.tool_call is None) != (self.tool_result is None):
+            raise ValueError("tool call and result must either both exist or both be absent")
+        if self.tool_call is not None and self.tool_result is not None:
+            if self.tool_call.call_id != self.tool_result.call_id:
+                raise ValueError("tool call and result IDs must match")
+        if self.parse_error is not None and self.tool_call is not None:
+            raise ValueError("a parse-error event cannot contain a tool call")
+        if self.parse_error is None and self.tool_call is None:
+            raise ValueError("an event without a tool call must describe a parse error")
+        if self.generation_trace is not None:
+            if len(self.generation_trace.generated_token_ids) != self.token_usage.output_tokens:
+                raise ValueError("generated token count must match output token usage")
         return self
 
 
 class Trajectory(StrictModel):
-    trajectory_id: str = Field(min_length=1, max_length=128)
+    trajectory_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
     task_id: str = Field(min_length=1, max_length=128)
     policy_id: str = Field(min_length=1, max_length=256)
     policy_revision: str = Field(min_length=1, max_length=256)
+    policy_adapter_sha256: str | None = Field(
+        default=None,
+        pattern=r"^sha256:[0-9a-f]{64}$",
+    )
     config_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    max_conversation_bytes: int = Field(default=3_000, ge=2_048, le=100_000)
     seed: int
     events: tuple[TrajectoryEvent, ...]
     termination_reason: TerminationReason
